@@ -33,7 +33,7 @@ Slack implemented direct message to myself. this command notify you an end of co
 ./exslack commands.txt
 ```
 
-4. When the command finished, notify you on channel you specified. And if you set log file, an output will be written the log file.
+4. When the command finish, notify you on channel you specified. And if you set log file, an output will be written the log file.
 
 
 ## Help
