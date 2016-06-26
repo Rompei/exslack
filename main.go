@@ -65,17 +65,17 @@ func main() {
 	// If there is log output, open log file.
 	var logFile *os.File
 	var fileLogger *log.Logger
-	if config.LogFile != "" {
-		logFile, err = os.OpenFile(config.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			stdLogger.Fatalf("Can't open log file %s", config.LogFile)
-		}
-		defer logFile.Close()
-		fileLogger = log.New(logFile, "exslack: ", log.LstdFlags)
-	} else if logFilePath != "" {
+	if logFilePath != "" {
 		logFile, err = os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
 			stdLogger.Fatalf("Can't open log file %s", logFilePath)
+		}
+		defer logFile.Close()
+		fileLogger = log.New(logFile, "exslack: ", log.LstdFlags)
+	} else if config.LogFile != "" {
+		logFile, err = os.OpenFile(config.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			stdLogger.Fatalf("Can't open log file %s", config.LogFile)
 		}
 		defer logFile.Close()
 		fileLogger = log.New(logFile, "exslack: ", log.LstdFlags)
