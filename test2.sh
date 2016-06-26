@@ -1,3 +1,3 @@
 #!/bin/sh
 
-echo "test2 $1"
+ech "test2 $1"

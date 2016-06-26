@@ -134,9 +134,9 @@ func main() {
 
 func buildText(commandName string, start *time.Time, elapsed *time.Duration, err error) string {
 	if err == nil {
-		return fmt.Sprintf("Command %s started on %s is done in %s", commandName, start.String(), elapsed)
+		return fmt.Sprintf("Command %s started on %s is done in %s", commandName, start, elapsed)
 	}
-	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", commandName, start.String(), elapsed, err.Error)
+	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", commandName, start, elapsed, err.Error())
 }
 
 func postToSlack(url string, body *WebHookBody) error {
