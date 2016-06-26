@@ -1,0 +1,18 @@
+exslack: 2016/06/26 15:16:19 Command ./test1.sh started on 2016-06-26 15:16:19.363573005 +0900 JST is done in 5.61877ms
+
+ == Output start == 
+
+test1 test1arg1
+
+
+ == Output end == 
+
+exslack: 2016/06/26 15:16:20 Command ./test2.sh started on 2016-06-26 15:16:20.761145297 +0900 JST is done in 10.125984ms
+
+ == Output start == 
+
+test2 test2arg1
+
+
+ == Output end == 
+
