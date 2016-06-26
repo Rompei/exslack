@@ -139,10 +139,6 @@ func buildText(commandName string, start *time.Time, elapsed *time.Duration, err
 	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", commandName, start.String(), elapsed, err.Error)
 }
 
-func execCommand(command []string) ([]byte, error) {
-	return exec.Command(command[0], command[1:]...).Output()
-}
-
 func postToSlack(url string, body *WebHookBody) error {
 
 	// Posting slack incoming webhooks.
