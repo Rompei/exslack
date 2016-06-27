@@ -107,7 +107,7 @@ func main() {
 			err = exec.Command(commands[i][0], commands[i][1:]...).Run()
 		}
 		elapsed := time.Now().Sub(start)
-		text := buildText(commands[i][0], &start, &elapsed, err)
+		text := buildText(commands[i], &start, &elapsed, err)
 		body := &WebHookBody{
 			Text:    text,
 			Channel: config.Destination,
@@ -132,11 +132,11 @@ func main() {
 	}
 }
 
-func buildText(commandName string, start *time.Time, elapsed *time.Duration, err error) string {
+func buildText(command []string, start *time.Time, elapsed *time.Duration, err error) string {
 	if err == nil {
-		return fmt.Sprintf("Command %s started on %s is done in %s", commandName, start, elapsed)
+		return fmt.Sprintf("Command %s started on %s is done in %s", strings.Join(command, " "), start, elapsed)
 	}
-	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", commandName, start, elapsed, err.Error())
+	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", strings.Join(command, " "), start, elapsed, err.Error())
 }
 
 func postToSlack(url string, body *WebHookBody) error {
