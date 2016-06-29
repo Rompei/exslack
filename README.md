@@ -52,8 +52,8 @@ Usage of ./exslack:
   -c  Execute commands concrrentry.
   -cpu uint
       How many CPUs to execution. (default 1)
-  -log string
-      If you need output of commands, please set this flag or set from config file.
+  -l string
+      List of jobs.
   -log string
       If you need output of commands, please set this flag or set from config file.
 ```
