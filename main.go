@@ -36,6 +36,7 @@ type Options struct {
 	LogFilePath string
 	IsConc      bool
 	NumCPU      uint
+	JobList     string
 }
 
 // Job is result of command with output.
@@ -69,6 +70,7 @@ func main() {
 	flag.StringVar(&opts.LogFilePath, "log", "", "If you need output of commands, please set this flag or set from config file.")
 	flag.BoolVar(&opts.IsConc, "c", false, "Execute commands concrrentry.")
 	flag.UintVar(&opts.NumCPU, "cpu", 1, "How many CPUs to execution.")
+	flag.StringVar(&opts.JobList, "l", "", "List of jobs.")
 	flag.Parse()
 
 	// Decide using cpus.
@@ -84,9 +86,6 @@ func main() {
 	stdLogger := log.New(os.Stdout, "exslack: ", log.LstdFlags)
 
 	// Reading config file from ~/.exslackrc
-	if num := flag.NArg(); num != 1 {
-		stdLogger.Fatalf("The number of arguments is wrong %d", num)
-	}
 	configFilePath, err := homedir.Expand("~/.exslackrc")
 	if err != nil {
 		panic(err)
@@ -124,25 +123,17 @@ func main() {
 		fileLogger = log.New(logFile, "exslack: ", log.LstdFlags)
 	}
 
-	// Reading commands from file.
-	commandFile := flag.Arg(0)
-	f, err = ioutil.ReadFile(commandFile)
-	if err != nil {
+	// Loading jobs.
+	var jobs []Job
+	if flag.NArg() != 0 {
+		jobs = loadJobsFromArgs()
+	} else if opts.JobList != "" {
+		jobs = loadJobsFromFile(opts.JobList, stdLogger, fileLogger)
+	} else {
 		if fileLogger != nil {
-			fileLogger.Printf("Command file %s was not found", commandFile)
+			fileLogger.Println("Command must be received from -l option or file.")
 		}
-		stdLogger.Fatalf("Command file %s was not found", commandFile)
-	}
-	commands := strings.Split(strings.Trim(string(f), "\n"), "\n")
-	if len(commands) == 0 || commands[0] == "" {
-		if fileLogger != nil {
-			fileLogger.Println("Command is not defined")
-		}
-		stdLogger.Fatalln("Command is not defined")
-	}
-	jobs := make([]Job, len(commands))
-	for i := range commands {
-		jobs[i] = *NewJob(strings.Fields(commands[i]))
+		stdLogger.Fatalln("Command must be received from -l option or file.")
 	}
 
 	// Execute commands.
@@ -195,6 +186,34 @@ func prepro(config *Config, stdLogger, fileLogger *log.Logger, job *Job) {
 	if err := postToSlack(config.WebHookURL, body); err != nil {
 		stdLogger.Fatal("failed to post to Slack.")
 	}
+}
+
+func loadJobsFromArgs() []Job {
+	jobs := make([]Job, 1)
+	jobs[0] = *NewJob(flag.Args())
+	return jobs
+}
+
+func loadJobsFromFile(fname string, stdLogger, fileLogger *log.Logger) []Job {
+	f, err := ioutil.ReadFile(fname)
+	if err != nil {
+		if fileLogger != nil {
+			fileLogger.Printf("Command file %s was not found", fname)
+		}
+		stdLogger.Fatalf("Command file %s was not found", fname)
+	}
+	commands := strings.Split(strings.Trim(string(f), "\n"), "\n")
+	if len(commands) == 0 || commands[0] == "" {
+		if fileLogger != nil {
+			fileLogger.Println("Command is not defined")
+		}
+		stdLogger.Fatalln("Command is not defined")
+	}
+	jobs := make([]Job, len(commands))
+	for i := range commands {
+		jobs[i] = *NewJob(strings.Fields(commands[i]))
+	}
+	return jobs
 }
 
 func execWithOutput(job *Job, resCh chan *Job) {
