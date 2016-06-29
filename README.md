@@ -1,8 +1,11 @@
 # exslack
 
+[![Build Status](https://drone.io/github.com/Rompei/exslack/status.png)](https://drone.io/github.com/Rompei/exslack/latest)
+
 Job manager notifying to Slack.   
 Slack implemented direct message to myself. this command notify you an end of commands on Slack.
 
+[Executable](https://drone.io/github.com/Rompei/exslack/files)
 
 ## Usage
 
