@@ -86,9 +86,6 @@ func main() {
 	stdLogger := log.New(os.Stdout, "exslack: ", log.LstdFlags)
 
 	// Reading config file from ~/.exslackrc
-	if num := flag.NArg(); num != 1 {
-		stdLogger.Fatalf("The number of arguments is wrong %d", num)
-	}
 	configFilePath, err := homedir.Expand("~/.exslackrc")
 	if err != nil {
 		panic(err)
