@@ -27,3 +27,15 @@ test1 test1arg1
 
 exslack: 2016/06/26 19:09:59 Command ./test2.sh started on 2016-06-26 19:09:59.442751174 +0900 JST is done in 8.099324ms with error, exit status 127
 
+exslack: 2016/06/29 13:58:35 Command ./test1.sh test1arg1 started on 2016-06-29 13:58:35.841190603 +0900 JST is done in 4.380505ms
+
+ == Output start == 
+
+test1 test1arg1
+
+
+ == Output end == 
+
+exslack: 2016/06/29 13:58:37 Command ./test2.sh test2arg1 test2arg2 started on 2016-06-29 13:58:37.181616333 +0900 JST is done in 12.392522ms with error, ./test2.sh: line 3: ech: command not found
+
+
