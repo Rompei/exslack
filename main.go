@@ -171,8 +171,10 @@ func main() {
 func prepro(config *Config, stdLogger, fileLogger *log.Logger, job *Job) {
 	text := buildText(job.FullCommand, job.Start, job.Elapsed, job.Err)
 	body := &WebHookBody{
-		Text:    text,
-		Channel: config.Destination,
+		Text:      text,
+		Channel:   config.Destination,
+		Username:  "exslack",
+		IconEmoji: ":tada:",
 	}
 	// Output log to stdout.
 	stdLogger.Println(text)
