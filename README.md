@@ -40,8 +40,11 @@ Slack implemented direct message to myself. this command notify you an end of co
 
 ```bash
 Usage of ./exslack:
+  -c  Execute commands concrrentry.
+  -cpu uint
+      How many CPUs to execution. (default 1)
   -log string
-        If you need output of commands, please set this flag or set from config file.
+      If you need output of commands, please set this flag or set from config file.
 ```
 
 ## License

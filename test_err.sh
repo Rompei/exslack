@@ -1,0 +1,3 @@
+#!/bin/sh
+
+ech "aaa"
