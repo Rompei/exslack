@@ -36,6 +36,12 @@ Slack implemented direct message to myself. this command notify you an end of co
 4. When the command finish, notify you on channel you specified. And if you set log file, an output will be written the log file.
 
 
+5. Also we can execute command instantly
+
+```bash
+./exslack echo "aaa"
+```
+
 ## Help
 
 ```bash
@@ -43,6 +49,8 @@ Usage of ./exslack:
   -c  Execute commands concrrentry.
   -cpu uint
       How many CPUs to execution. (default 1)
+  -log string
+      If you need output of commands, please set this flag or set from config file.
   -log string
       If you need output of commands, please set this flag or set from config file.
 ```
