@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -30,13 +31,55 @@ type WebHookBody struct {
 	IconEmoji string `json:"icon_emoji"`
 }
 
-func main() {
-	var (
-		logFilePath string
-	)
+// Options is command line options.
+type Options struct {
+	LogFilePath string
+	IsConc      bool
+	NumCPU      uint
+}
 
-	flag.StringVar(&logFilePath, "log", "", "If you need output of commands, please set this flag or set from config file.")
+// Job is result of command with output.
+type Job struct {
+	FullCommand []string
+	Command     string
+	Args        []string
+	Start       *time.Time
+	End         *time.Time
+	Elapsed     *time.Duration
+	Output      []byte
+	Err         error
+}
+
+// NewJob is constructor of Job.
+func NewJob(fullCommand []string) *Job {
+	var args []string
+	if len(fullCommand) >= 2 {
+		args = fullCommand[1:]
+	}
+	return &Job{
+		FullCommand: fullCommand,
+		Command:     fullCommand[0],
+		Args:        args,
+	}
+}
+
+func main() {
+	var opts Options
+
+	flag.StringVar(&opts.LogFilePath, "log", "", "If you need output of commands, please set this flag or set from config file.")
+	flag.BoolVar(&opts.IsConc, "c", false, "Execute commands concrrentry.")
+	flag.UintVar(&opts.NumCPU, "cpu", 1, "How many CPUs to execution.")
 	flag.Parse()
+
+	// Decide using cpus.
+	numCPUs := runtime.NumCPU()
+	if int(opts.NumCPU) >= numCPUs {
+		runtime.GOMAXPROCS(numCPUs)
+	} else if opts.NumCPU == 0 {
+		runtime.GOMAXPROCS(1)
+	} else {
+		runtime.GOMAXPROCS(int(opts.NumCPU))
+	}
 
 	stdLogger := log.New(os.Stdout, "exslack: ", log.LstdFlags)
 
@@ -65,10 +108,10 @@ func main() {
 	// If there is log output, open log file.
 	var logFile *os.File
 	var fileLogger *log.Logger
-	if logFilePath != "" {
-		logFile, err = os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if opts.LogFilePath != "" {
+		logFile, err = os.OpenFile(opts.LogFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 		if err != nil {
-			stdLogger.Fatalf("Can't open log file %s", logFilePath)
+			stdLogger.Fatalf("Can't open log file %s", opts.LogFilePath)
 		}
 		defer logFile.Close()
 		fileLogger = log.New(logFile, "exslack: ", log.LstdFlags)
@@ -90,49 +133,96 @@ func main() {
 		}
 		stdLogger.Fatalf("Command file %s was not found", commandFile)
 	}
-	_commands := strings.Split(strings.Trim(string(f), "\n"), "\n")
-	commands := make([][]string, len(_commands))
-	for i := range _commands {
-		commands[i] = strings.Fields(_commands[i])
+	commands := strings.Split(strings.Trim(string(f), "\n"), "\n")
+	if len(commands) == 0 || commands[0] == "" {
+		if fileLogger != nil {
+			fileLogger.Println("Command is not defined")
+		}
+		stdLogger.Fatalln("Command is not defined")
 	}
-
-	// Executing commands.
+	jobs := make([]Job, len(commands))
 	for i := range commands {
-		start := time.Now()
-		var output []byte
-		var err error
-		if fileLogger != nil {
-			output, err = exec.Command(commands[i][0], commands[i][1:]...).CombinedOutput()
-		} else {
-			err = exec.Command(commands[i][0], commands[i][1:]...).Run()
-		}
-		elapsed := time.Now().Sub(start)
-		text := buildText(commands[i], &start, &elapsed, err)
-		body := &WebHookBody{
-			Text:    text,
-			Channel: config.Destination,
-		}
+		jobs[i] = *NewJob(strings.Fields(commands[i]))
+	}
 
-		// Output log to stdout.
-		stdLogger.Println(text)
-
-		// If logFile is opened, output to log file.
-		if fileLogger != nil {
-			fileLogger.Printf("%s\n\n == Output start == \n\n%s\n\n == Output end == \n\n", text, string(output))
+	// Execute commands.
+	resCh := make(chan *Job, len(jobs))
+	defer close(resCh)
+	if opts.IsConc {
+		for i := range jobs {
+			start := time.Now()
+			jobs[i].Start = &start
+			if fileLogger != nil {
+				go execWithOutput(&jobs[i], resCh)
+			} else {
+				go execWithoutOutput(&jobs[i], resCh)
+			}
 		}
-
-		// Post to Slack.
-		if err = postToSlack(config.WebHookURL, body); err != nil {
-			stdLogger.Fatal("failed to post to Slack.")
+		for i := 0; i < len(jobs); i++ {
+			job := <-resCh
+			prepro(&config, stdLogger, fileLogger, job)
+		}
+	} else {
+		for i := range jobs {
+			start := time.Now()
+			jobs[i].Start = &start
+			if fileLogger != nil {
+				go execWithOutput(&jobs[i], resCh)
+			} else {
+				go execWithoutOutput(&jobs[i], resCh)
+			}
+			job := <-resCh
+			prepro(&config, stdLogger, fileLogger, job)
 		}
 	}
+}
+
+func prepro(config *Config, stdLogger, fileLogger *log.Logger, job *Job) {
+	text := buildText(job.FullCommand, job.Start, job.Elapsed, job.Err)
+	body := &WebHookBody{
+		Text:    text,
+		Channel: config.Destination,
+	}
+	// Output log to stdout.
+	stdLogger.Println(text)
+
+	// If logFile is opened, output to log file.
+	if fileLogger != nil {
+		fileLogger.Printf("%s\n\n == Output start == \n\n%s\n\n == Output end == \n\n", text, string(job.Output))
+	}
+
+	// Post to Slack.
+	if err := postToSlack(config.WebHookURL, body); err != nil {
+		stdLogger.Fatal("failed to post to Slack.")
+	}
+}
+
+func execWithOutput(job *Job, resCh chan *Job) {
+	output, err := exec.Command(job.Command, job.Args...).CombinedOutput()
+	end := time.Now()
+	job.End = &end
+	elapsed := end.Sub(*job.Start)
+	job.Elapsed = &elapsed
+	job.Err = err
+	job.Output = output
+	resCh <- job
+}
+
+func execWithoutOutput(job *Job, resCh chan *Job) {
+	err := exec.Command(job.Command, job.Args...).Run()
+	end := time.Now()
+	job.End = &end
+	elapsed := end.Sub(*job.Start)
+	job.Elapsed = &elapsed
+	job.Err = err
+	resCh <- job
 }
 
 func buildText(command []string, start *time.Time, elapsed *time.Duration, err error) string {
 	if err == nil {
 		return fmt.Sprintf("Command %s started on %s is done in %s", strings.Join(command, " "), start, elapsed)
 	}
-	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", strings.Join(command, " "), start, elapsed, err.Error)
+	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", strings.Join(command, " "), start, elapsed, err.Error())
 }
 
 func postToSlack(url string, body *WebHookBody) error {
