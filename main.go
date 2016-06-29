@@ -151,7 +151,7 @@ func main() {
 		}
 		for i := 0; i < len(jobs); i++ {
 			job := <-resCh
-			prepro(&config, stdLogger, fileLogger, job)
+			postpro(&config, stdLogger, fileLogger, job)
 		}
 	} else {
 		for i := range jobs {
@@ -163,12 +163,12 @@ func main() {
 				go execWithoutOutput(&jobs[i], resCh)
 			}
 			job := <-resCh
-			prepro(&config, stdLogger, fileLogger, job)
+			postpro(&config, stdLogger, fileLogger, job)
 		}
 	}
 }
 
-func prepro(config *Config, stdLogger, fileLogger *log.Logger, job *Job) {
+func postpro(config *Config, stdLogger, fileLogger *log.Logger, job *Job) {
 	text := buildText(job.FullCommand, job.Start, job.Elapsed, job.Err)
 	body := &WebHookBody{
 		Text:      text,
