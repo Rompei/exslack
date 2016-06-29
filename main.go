@@ -107,7 +107,7 @@ func main() {
 			err = exec.Command(commands[i][0], commands[i][1:]...).Run()
 		}
 		elapsed := time.Now().Sub(start)
-		text := buildText(commands[i], &start, &elapsed, output, err)
+		text := buildText(commands[i], &start, &elapsed, err)
 		body := &WebHookBody{
 			Text:    text,
 			Channel: config.Destination,
@@ -118,11 +118,7 @@ func main() {
 
 		// If logFile is opened, output to log file.
 		if fileLogger != nil {
-			if err != nil {
-				fileLogger.Printf("%s\n\n", text)
-			} else {
-				fileLogger.Printf("%s\n\n == Output start == \n\n%s\n\n == Output end == \n\n", text, string(output))
-			}
+			fileLogger.Printf("%s\n\n == Output start == \n\n%s\n\n == Output end == \n\n", text, string(output))
 		}
 
 		// Post to Slack.
@@ -132,14 +128,11 @@ func main() {
 	}
 }
 
-func buildText(command []string, start *time.Time, elapsed *time.Duration, output []byte, err error) string {
+func buildText(command []string, start *time.Time, elapsed *time.Duration, err error) string {
 	if err == nil {
 		return fmt.Sprintf("Command %s started on %s is done in %s", strings.Join(command, " "), start, elapsed)
 	}
-	if len(output) == 0 {
-		return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", strings.Join(command, " "), start, elapsed, err.Error)
-	}
-	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", strings.Join(command, " "), start, elapsed, string(output))
+	return fmt.Sprintf("Command %s started on %s is done in %s with error, %s", strings.Join(command, " "), start, elapsed, err.Error)
 }
 
 func postToSlack(url string, body *WebHookBody) error {
