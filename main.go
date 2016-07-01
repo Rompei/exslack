@@ -75,10 +75,8 @@ func main() {
 
 	// Decide using cpus.
 	numCPUs := runtime.NumCPU()
-	if int(opts.NumCPU) >= numCPUs {
+	if int(opts.NumCPU) >= numCPUs || opts.NumCPU == 0 {
 		runtime.GOMAXPROCS(numCPUs)
-	} else if opts.NumCPU == 0 {
-		runtime.GOMAXPROCS(1)
 	} else {
 		runtime.GOMAXPROCS(int(opts.NumCPU))
 	}
