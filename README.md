@@ -55,8 +55,8 @@ Usage of ./exslack:
     	How many CPUs to execution. (default 1)
   --jobs string
     	List of jobs.
-  --log string
-    	If you need output of commands, please set this flag or set from config file.
+  --logfile string
+    	If you need output of commands, please set this flag or set directory from config file.
   --maxage int
     	Max age to remine log file. (unit: day) (default 7)
   --maxbackups int

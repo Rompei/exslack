@@ -71,7 +71,7 @@ func NewJob(fullCommand []string) *Job {
 func main() {
 	var opts Options
 
-	flag.StringVar(&opts.LogFilePath, "-log", "", "If you need output of commands, please set this flag or set from config file.")
+	flag.StringVar(&opts.LogFilePath, "-logfile", "", "If you need output of commands, please set this flag or set directory from config file.")
 	flag.BoolVar(&opts.IsConc, "-conc", false, "Execute commands concrrentry.")
 	flag.UintVar(&opts.NumCPU, "-cpus", 1, "How many CPUs to execution.")
 	flag.StringVar(&opts.JobList, "-jobs", "", "List of jobs.")
