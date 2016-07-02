@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -20,7 +21,7 @@ import (
 type Config struct {
 	WebHookURL  string `json:"webHookURL"`
 	Destination string `json:"destination"`
-	LogFile     string `json:"logFile"`
+	LogDir      string `json:"logDir"`
 }
 
 // WebHookBody is body of slack webhook.
@@ -37,6 +38,9 @@ type Options struct {
 	IsConc      bool
 	NumCPU      uint
 	JobList     string
+	MaxAge      int
+	MaxBackups  int
+	MaxSize     int
 }
 
 // Job is result of command with output.
@@ -67,10 +71,13 @@ func NewJob(fullCommand []string) *Job {
 func main() {
 	var opts Options
 
-	flag.StringVar(&opts.LogFilePath, "log", "", "If you need output of commands, please set this flag or set from config file.")
-	flag.BoolVar(&opts.IsConc, "c", false, "Execute commands concrrentry.")
-	flag.UintVar(&opts.NumCPU, "cpu", 1, "How many CPUs to execution.")
-	flag.StringVar(&opts.JobList, "l", "", "List of jobs.")
+	flag.StringVar(&opts.LogFilePath, "-log", "", "If you need output of commands, please set this flag or set from config file.")
+	flag.BoolVar(&opts.IsConc, "-conc", false, "Execute commands concrrentry.")
+	flag.UintVar(&opts.NumCPU, "-cpus", 1, "How many CPUs to execution.")
+	flag.StringVar(&opts.JobList, "-jobs", "", "List of jobs.")
+	flag.IntVar(&opts.MaxAge, "-maxage", 7, "Max age to remine log file. (unit: day)")
+	flag.IntVar(&opts.MaxBackups, "-maxbackups", 5, "The number of max backups.")
+	flag.IntVar(&opts.MaxSize, "-maxsize", 100, "Max size of log files. (unit: mega byte)")
 	flag.Parse()
 
 	// Decide using cpus.
@@ -95,7 +102,7 @@ func main() {
 	var config Config
 	err = json.Unmarshal(f, &config)
 	if err != nil {
-		stdLogger.Fatalf("Can't read config file %s", err.Error)
+		stdLogger.Fatalf("Can't read config file %s", err.Error())
 	}
 
 	if config.WebHookURL == "" || config.Destination == "" {
@@ -112,13 +119,16 @@ func main() {
 		}
 		defer logFile.Close()
 		fileLogger = log.New(logFile, "exslack: ", log.LstdFlags)
-	} else if config.LogFile != "" {
-		logFile, err = os.OpenFile(config.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			stdLogger.Fatalf("Can't open log file %s", config.LogFile)
+	} else if config.LogDir != "" {
+		l := &lumberjack.Logger{
+			Filename:   config.LogDir + "/exslack.log",
+			MaxAge:     opts.MaxAge,
+			MaxBackups: opts.MaxBackups,
+			MaxSize:    opts.MaxSize,
+			LocalTime:  true,
 		}
-		defer logFile.Close()
-		fileLogger = log.New(logFile, "exslack: ", log.LstdFlags)
+		defer l.Close()
+		fileLogger = log.New(l, "exslack: ", log.LstdFlags)
 	}
 
 	// Loading jobs.

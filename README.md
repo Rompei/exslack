@@ -15,13 +15,13 @@ Slack implemented direct message to myself. this command notify you an end of co
 {
   "webHookURL": "https://hooks.slack.com/services/X..../Y....",
   "destination": "@rompei",
-  "logFile": "/home/rompei/joblog.txt"
+  "logDir": "/home/rompei/log"
 }
 ```
 
 - webHookURL: URL of incoming web hook of Slack.
 - destination: User name or channel name you want to notify to.
-- logFile(optional): If you need output of commands, set this varialbe or set from command line option `-log`.
+- logDir(optional): If you need output of commands, set this varialbe or set from command line option `-log`.
 
 2. You have to prepare command list file like this.
 
@@ -49,13 +49,20 @@ Slack implemented direct message to myself. this command notify you an end of co
 
 ```bash
 Usage of ./exslack:
-  -c  Execute commands concrrentry.
-  -cpu uint
-      How many CPUs to execution. (default 1)
-  -l string
-      List of jobs.
-  -log string
-      If you need output of commands, please set this flag or set from config file.
+  --conc
+    	Execute commands concrrentry.
+  --cpus uint
+    	How many CPUs to execution. (default 1)
+  --jobs string
+    	List of jobs.
+  --log string
+    	If you need output of commands, please set this flag or set from config file.
+  --maxage int
+    	Max age to remine log file. (unit: day) (default 7)
+  --maxbackups int
+    	The number of max backups. (default 5)
+  --maxsize int
+    	Max size of log files. (unit: mega byte) (default 100)
 ```
 
 ## License
