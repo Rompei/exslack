@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	homedir "github.com/mitchellh/go-homedir"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -22,6 +24,9 @@ type Config struct {
 	WebHookURL  string `json:"webHookURL"`
 	Destination string `json:"destination"`
 	LogDir      string `json:"logDir"`
+	MaxAge      int    `json:"maxAge"`
+	MaxBackups  int    `json:"maxBackups"`
+	MaxSize     int    `json:"maxSize"`
 }
 
 // WebHookBody is body of slack webhook.
@@ -38,9 +43,6 @@ type Options struct {
 	IsConc      bool
 	NumCPU      uint
 	JobList     string
-	MaxAge      int
-	MaxBackups  int
-	MaxSize     int
 }
 
 // Job is result of command with output.
@@ -53,6 +55,7 @@ type Job struct {
 	Elapsed     *time.Duration
 	Output      []byte
 	Err         error
+	Progress    string
 }
 
 // NewJob is constructor of Job.
@@ -68,16 +71,25 @@ func NewJob(fullCommand []string) *Job {
 	}
 }
 
+func clearConfig(config *Config) {
+	if config.MaxAge == 0 {
+		config.MaxAge = 7
+	}
+	if config.MaxBackups == 0 {
+		config.MaxBackups = 5
+	}
+	if config.MaxSize == 0 {
+		config.MaxSize = 100
+	}
+}
+
 func main() {
 	var opts Options
 
-	flag.StringVar(&opts.LogFilePath, "-logfile", "", "If you need output of commands, please set this flag or set directory from config file.")
-	flag.BoolVar(&opts.IsConc, "-conc", false, "Execute commands concrrentry.")
-	flag.UintVar(&opts.NumCPU, "-cpus", 1, "How many CPUs to execution.")
-	flag.StringVar(&opts.JobList, "-jobs", "", "List of jobs.")
-	flag.IntVar(&opts.MaxAge, "-maxage", 7, "Max age to remine log file. (unit: day)")
-	flag.IntVar(&opts.MaxBackups, "-maxbackups", 5, "The number of max backups.")
-	flag.IntVar(&opts.MaxSize, "-maxsize", 100, "Max size of log files. (unit: mega byte)")
+	flag.StringVar(&opts.LogFilePath, "logfile", "", "If you need output of commands, please set this flag or set directory from config file.")
+	flag.BoolVar(&opts.IsConc, "conc", false, "Execute commands concrrentry.")
+	flag.UintVar(&opts.NumCPU, "cpus", 1, "How many CPUs to execution.")
+	flag.StringVar(&opts.JobList, "jobs", "", "List of jobs.")
 	flag.Parse()
 
 	// Decide using cpus.
@@ -104,6 +116,7 @@ func main() {
 	if err != nil {
 		stdLogger.Fatalf("Can't read config file %s", err.Error())
 	}
+	clearConfig(&config)
 
 	if config.WebHookURL == "" || config.Destination == "" {
 		stdLogger.Fatalf("Config file is not valid.")
@@ -122,9 +135,9 @@ func main() {
 	} else if config.LogDir != "" {
 		l := &lumberjack.Logger{
 			Filename:   config.LogDir + "/exslack.log",
-			MaxAge:     opts.MaxAge,
-			MaxBackups: opts.MaxBackups,
-			MaxSize:    opts.MaxSize,
+			MaxAge:     config.MaxAge,
+			MaxBackups: config.MaxBackups,
+			MaxSize:    config.MaxSize,
 			LocalTime:  true,
 		}
 		defer l.Close()
@@ -147,37 +160,134 @@ func main() {
 	// Execute commands.
 	resCh := make(chan *Job, len(jobs))
 	defer close(resCh)
+	progressCh := make(chan *Job, len(jobs))
+	defer close(progressCh)
 	if opts.IsConc {
+
+		// Concurrency
 		for i := range jobs {
 			start := time.Now()
 			jobs[i].Start = &start
 			if fileLogger != nil {
-				go execWithOutput(&jobs[i], resCh)
+				go execWithOutput(&jobs[i], resCh, progressCh)
 			} else {
 				go execWithoutOutput(&jobs[i], resCh)
 			}
 		}
-		for i := 0; i < len(jobs); i++ {
-			job := <-resCh
-			postpro(&config, stdLogger, fileLogger, job)
+		jobNum := len(jobs)
+		finished := 0
+	L1:
+		for {
+			select {
+			case job := <-resCh:
+				text := buildText(job.FullCommand, job.Start, job.Elapsed, job.Err)
+				postpro(&config, stdLogger, fileLogger, job, text)
+				finished++
+				if finished == jobNum {
+					break L1
+				}
+			case job := <-progressCh:
+				printProgress(job, stdLogger, fileLogger, true)
+			}
 		}
 	} else {
+
+		// Not concarrency
 		for i := range jobs {
 			start := time.Now()
 			jobs[i].Start = &start
 			if fileLogger != nil {
-				go execWithOutput(&jobs[i], resCh)
+				fileLogger.Println(" == Output start == ")
+				go execWithOutput(&jobs[i], resCh, progressCh)
 			} else {
 				go execWithoutOutput(&jobs[i], resCh)
 			}
-			job := <-resCh
-			postpro(&config, stdLogger, fileLogger, job)
+		L2:
+			for {
+				select {
+				case job := <-resCh:
+					if fileLogger != nil {
+						fileLogger.Println(" == Output end == ")
+					}
+					text := buildText(job.FullCommand, job.Start, job.Elapsed, job.Err)
+					if fileLogger != nil {
+						fileLogger.Println(text)
+					}
+					postpro(&config, stdLogger, nil, job, text)
+					break L2
+				case job := <-progressCh:
+					printProgress(job, stdLogger, fileLogger, false)
+				}
+			}
 		}
 	}
 }
 
-func postpro(config *Config, stdLogger, fileLogger *log.Logger, job *Job) {
-	text := buildText(job.FullCommand, job.Start, job.Elapsed, job.Err)
+func execWithOutput(job *Job, resCh chan *Job, progressCh chan *Job) {
+	cmd := exec.Command(job.Command, job.Args...)
+	outReader, err := cmd.StdoutPipe()
+	errReader, err := cmd.StderrPipe()
+	if err != nil {
+		job.Err = err
+		makeJob(job)
+		resCh <- job
+		return
+	}
+	reader := io.MultiReader(outReader, errReader)
+	var buf bytes.Buffer
+	reader = io.TeeReader(reader, &buf)
+
+	if err = cmd.Start(); err != nil {
+		job.Err = err
+		makeJob(job)
+		resCh <- job
+		return
+	}
+
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		job.Progress = scanner.Text()
+		progressCh <- job
+	}
+	job.Err = cmd.Wait()
+	makeJob(job)
+	job.Output = buf.Bytes()
+	resCh <- job
+}
+
+func execWithoutOutput(job *Job, resCh chan *Job) {
+	err := exec.Command(job.Command, job.Args...).Run()
+	if err != nil {
+		job.Err = err
+		resCh <- job
+		return
+	}
+	job.Err = err
+	makeJob(job)
+	resCh <- job
+}
+
+func makeJob(job *Job) {
+	end := time.Now()
+	job.End = &end
+	elapsed := end.Sub(*job.Start)
+	job.Elapsed = &elapsed
+}
+
+func printProgress(job *Job, stdLogger, fileLogger *log.Logger, showCommand bool) {
+	output := ""
+	if showCommand {
+		output = fmt.Sprintf("%s:\t%s", job.Command, job.Progress)
+	} else {
+		output = job.Progress
+	}
+	stdLogger.Println(output)
+	if fileLogger != nil {
+		fileLogger.Println(output)
+	}
+}
+
+func postpro(config *Config, stdLogger, fileLogger *log.Logger, job *Job, text string) {
 	body := &WebHookBody{
 		Text:      text,
 		Channel:   config.Destination,
@@ -189,7 +299,10 @@ func postpro(config *Config, stdLogger, fileLogger *log.Logger, job *Job) {
 
 	// If logFile is opened, output to log file.
 	if fileLogger != nil {
-		fileLogger.Printf("%s\n\n == Output start == \n\n%s\n\n == Output end == \n\n", text, string(job.Output))
+		fileLogger.Printf(" == All output start == ")
+		fileLogger.Printf("%s", string(job.Output))
+		fileLogger.Printf(" == All output end == ")
+		fileLogger.Printf("%s", text)
 	}
 
 	// Post to Slack.
@@ -224,27 +337,6 @@ func loadJobsFromFile(fname string, stdLogger, fileLogger *log.Logger) []Job {
 		jobs[i] = *NewJob(strings.Fields(commands[i]))
 	}
 	return jobs
-}
-
-func execWithOutput(job *Job, resCh chan *Job) {
-	output, err := exec.Command(job.Command, job.Args...).CombinedOutput()
-	end := time.Now()
-	job.End = &end
-	elapsed := end.Sub(*job.Start)
-	job.Elapsed = &elapsed
-	job.Err = err
-	job.Output = output
-	resCh <- job
-}
-
-func execWithoutOutput(job *Job, resCh chan *Job) {
-	err := exec.Command(job.Command, job.Args...).Run()
-	end := time.Now()
-	job.End = &end
-	elapsed := end.Sub(*job.Start)
-	job.Elapsed = &elapsed
-	job.Err = err
-	resCh <- job
 }
 
 func buildText(command []string, start *time.Time, elapsed *time.Duration, err error) string {
