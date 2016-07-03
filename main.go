@@ -24,6 +24,9 @@ type Config struct {
 	WebHookURL  string `json:"webHookURL"`
 	Destination string `json:"destination"`
 	LogDir      string `json:"logDir"`
+	MaxAge      int    `json:"maxAge"`
+	MaxBackups  int    `json:"maxBackups"`
+	MaxSize     int    `json:"maxSize"`
 }
 
 // WebHookBody is body of slack webhook.
@@ -40,9 +43,6 @@ type Options struct {
 	IsConc      bool
 	NumCPU      uint
 	JobList     string
-	MaxAge      int
-	MaxBackups  int
-	MaxSize     int
 }
 
 // Job is result of command with output.
@@ -71,6 +71,18 @@ func NewJob(fullCommand []string) *Job {
 	}
 }
 
+func clearConfig(config *Config) {
+	if config.MaxAge == 0 {
+		config.MaxAge = 7
+	}
+	if config.MaxBackups == 0 {
+		config.MaxBackups = 5
+	}
+	if config.MaxSize == 0 {
+		config.MaxSize = 100
+	}
+}
+
 func main() {
 	var opts Options
 
@@ -78,9 +90,6 @@ func main() {
 	flag.BoolVar(&opts.IsConc, "conc", false, "Execute commands concrrentry.")
 	flag.UintVar(&opts.NumCPU, "cpus", 1, "How many CPUs to execution.")
 	flag.StringVar(&opts.JobList, "jobs", "", "List of jobs.")
-	flag.IntVar(&opts.MaxAge, "maxage", 7, "Max age to remine log file. (unit: day)")
-	flag.IntVar(&opts.MaxBackups, "maxbackups", 5, "The number of max backups.")
-	flag.IntVar(&opts.MaxSize, "maxsize", 100, "Max size of log files. (unit: mega byte)")
 	flag.Parse()
 
 	// Decide using cpus.
@@ -107,6 +116,7 @@ func main() {
 	if err != nil {
 		stdLogger.Fatalf("Can't read config file %s", err.Error())
 	}
+	clearConfig(&config)
 
 	if config.WebHookURL == "" || config.Destination == "" {
 		stdLogger.Fatalf("Config file is not valid.")
@@ -125,9 +135,9 @@ func main() {
 	} else if config.LogDir != "" {
 		l := &lumberjack.Logger{
 			Filename:   config.LogDir + "/exslack.log",
-			MaxAge:     opts.MaxAge,
-			MaxBackups: opts.MaxBackups,
-			MaxSize:    opts.MaxSize,
+			MaxAge:     config.MaxAge,
+			MaxBackups: config.MaxBackups,
+			MaxSize:    config.MaxSize,
 			LocalTime:  true,
 		}
 		defer l.Close()
