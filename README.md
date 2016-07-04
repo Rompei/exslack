@@ -56,7 +56,7 @@ Slack implemented direct message to myself. this command notify you an end of co
 ```bash
 Usage of ./exslack:
   -conc
-    	Execute commands concrrentry.
+    	Execute commands concurrently.
   -cpus uint
     	How many CPUs to execution. (default 1)
   -jobs string
